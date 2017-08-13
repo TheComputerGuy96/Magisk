@@ -44,7 +44,7 @@ void manage_selinux() {
 }
 
 void hide_sensitive_props() {
-	LOGI("hide_pre_proc: Hiding sensitive props\n");
+	LOGI("hide_utils: Hiding sensitive props\n");
 
 	// Hide all sensitive props
 	char *value;
@@ -58,6 +58,17 @@ void hide_sensitive_props() {
 	}
 }
 
+static void rm_magisk_prop(const char *name) {
+	if (strstr(name, "magisk")) {
+		deleteprop(name, 0);
+	}
+}
+
+void clean_magisk_props() {
+	LOGD("hide_utils: Cleaning magisk props\n");
+	getprop_all(rm_magisk_prop);
+}
+
 void relink_sbin() {
 	struct stat st;
 	if (stat("/sbin_orig", &st) == -1 && errno == ENOENT) {
@@ -66,7 +77,7 @@ void relink_sbin() {
 		struct dirent *entry;
 		char from[PATH_MAX], to[PATH_MAX];
 
-		LOGI("hide_pre_proc: Re-linking /sbin\n");
+		LOGI("hide_utils: Re-linking /sbin\n");
 
 		xmount(NULL, "/", NULL, MS_REMOUNT, NULL);
 		xrename("/sbin", "/sbin_orig");
@@ -78,10 +89,14 @@ void relink_sbin() {
 		dir = xopendir("/sbin_orig");
 
 		while ((entry = xreaddir(dir))) {
-			snprintf(from, sizeof(from), "%s/%s", "/sbin_orig", entry->d_name);
-			snprintf(to, sizeof(to), "%s/%s", "/dev/sbin_bind", entry->d_name);
+			if (strcmp(entry->d_name, "..") == 0)
+				continue;
+			snprintf(from, sizeof(from), "/sbin_orig/%s", entry->d_name);
+			if (entry->d_type == DT_LNK)
+				xreadlink(from, from, sizeof(from));
+			snprintf(to, sizeof(to), "/dev/sbin_bind/%s", entry->d_name);
 			symlink(from, to);
-			lsetfilecon(to, "u:object_r:system_file:s0");
+			lsetfilecon(to, "u:object_r:rootfs:s0");
 		}
 		
 		closedir(dir);

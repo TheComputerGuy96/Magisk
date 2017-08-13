@@ -1,11 +1,11 @@
 #!/sbin/sh
 ##########################################################################################
-# 
+#
 # Magisk Survival Script for ROMs with addon.d support
 # by topjohnwu
-# 
+#
 # Inspired by 99-flashafterupdate.sh of osm0sis @ xda-developers
-# 
+#
 ##########################################################################################
 
 . /tmp/backuptool.functions
@@ -28,16 +28,19 @@ main() {
   mount -o ro /vendor 2>/dev/null
   mount /data 2>/dev/null
 
-  # Load all functions
+  # Load utility functions
   . $MAGISKBIN/util_functions.sh
 
   [ -f /system/build.prop ] || abort "! /system could not be mounted!"
 
   ui_print "************************"
-  ui_print "* MAGISK_VERSION_STUB"
+  ui_print "* Magisk v$MAGISK_VER addon.d"
   ui_print "************************"
 
   api_level_arch_detect
+
+  # Check if system root is installed and remove
+  remove_system_su
 
   recovery_actions
 
@@ -57,7 +60,7 @@ main() {
   if [ -L "$BOOTIMAGE" ]; then
     dd if=new-boot.img of="$BOOTIMAGE" bs=4096
   else
-    cat new-boot.img /dev/zero | dd of="$BOOTIMAGE" bs=4096
+    cat new-boot.img /dev/zero | dd of="$BOOTIMAGE" bs=4096 >/dev/null 2>&1
   fi
   rm -f new-boot.img
 
@@ -88,7 +91,7 @@ case "$1" in
   post-restore)
     # Get the FD for ui_print
     OUTFD=`ps | grep -v grep | grep -oE "update(.*)" | cut -d" " -f3`
-    # Run the main function in a parallel subshell 
+    # Run the main function in a parallel subshell
     (main) &
   ;;
 esac

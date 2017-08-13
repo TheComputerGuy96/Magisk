@@ -13,9 +13,9 @@
 static int e2fsck(const char *img) {
 	// Check and repair ext4 image
 	char buffer[128];
-	int pid, fd = 0;
+	int pid, fd = -1;
 	char *const command[] = { "e2fsck", "-yf", (char *) img, NULL };
-	pid = run_command(1, &fd, "/system/bin/e2fsck", command);
+	pid = run_command(1, &fd, NULL, "/system/bin/e2fsck", command);
 	if (pid < 0)
 		return 1;
 	while (fdgets(buffer, sizeof(buffer), fd))
@@ -63,7 +63,7 @@ int create_img(const char *img, int size) {
 	char buffer[16];
 	snprintf(buffer, sizeof(buffer), "%dM", size);
 	char *const command[] = { "make_ext4fs", "-l", buffer, "-a", "/magisk", "-S", filename, (char *) img, NULL };
-	pid = run_command(0, NULL, "/system/bin/make_ext4fs", command);
+	pid = run_command(0, NULL, NULL, "/system/bin/make_ext4fs", command);
 	if (pid < 0)
 		return 1;
 	waitpid(pid, &status, 0);
@@ -75,9 +75,9 @@ int get_img_size(const char *img, int *used, int *total) {
 	if (access(img, R_OK) == -1)
 		return 1;
 	char buffer[PATH_MAX];
-	int pid, fd = 0, status = 1;
+	int pid, fd = -1, status = 1;
 	char *const command[] = { "e2fsck", "-n", (char *) img, NULL };
-	pid = run_command(1, &fd, "/system/bin/e2fsck", command);
+	pid = run_command(1, &fd, NULL, "/system/bin/e2fsck", command);
 	if (pid < 0)
 		return 1;
 	while (fdgets(buffer, sizeof(buffer), fd)) {
@@ -107,10 +107,10 @@ int resize_img(const char *img, int size) {
 	if (e2fsck(img))
 		return 1;
 	char buffer[128];
-	int pid, status, fd = 0;
+	int pid, status, fd = -1;
 	snprintf(buffer, sizeof(buffer), "%dM", size);
 	char *const command[] = { "resize2fs", (char *) img, buffer, NULL };
-	pid = run_command(1, &fd, "/system/bin/resize2fs", command);
+	pid = run_command(1, &fd, NULL, "/system/bin/resize2fs", command);
 	if (pid < 0)
 		return 1;
 	while (fdgets(buffer, sizeof(buffer), fd))
@@ -145,4 +145,73 @@ void umount_image(const char *target, const char *device) {
 	int fd = xopen(device, O_RDWR);
 	ioctl(fd, LOOP_CLR_FD);
 	close(fd);
+}
+
+int merge_img(const char *source, const char *target) {
+	if (access(source, F_OK) == -1)
+		return 0;
+	if (access(target, F_OK) == -1) {
+		rename(source, target);
+		return 0;
+	}
+
+	char buffer[PATH_MAX];
+
+	// resize target to worst case
+	int s_used, s_total, t_used, t_total, n_total;
+	get_img_size(source, &s_used, &s_total);
+	get_img_size(target, &t_used, &t_total);
+	n_total = round_size(s_used + t_used);
+	if (n_total != t_total)
+		resize_img(target, n_total);
+
+	xmkdir(SOURCE_TMP, 0755);
+	xmkdir(TARGET_TMP, 0755);
+	char *s_loop, *t_loop;
+	s_loop = mount_image(source, SOURCE_TMP);
+	if (s_loop == NULL) return 1;
+	t_loop = mount_image(target, TARGET_TMP);
+	if (t_loop == NULL) return 1;
+
+	DIR *dir;
+	struct dirent *entry;
+	if (!(dir = opendir(SOURCE_TMP)))
+		return 1;
+	while ((entry = xreaddir(dir))) {
+		if (entry->d_type == DT_DIR) {
+			if (strcmp(entry->d_name, ".") == 0 ||
+				strcmp(entry->d_name, "..") == 0 ||
+				strcmp(entry->d_name, ".core") == 0 ||
+				strcmp(entry->d_name, "lost+found") == 0)
+				continue;
+			// Cleanup old module if exists
+			snprintf(buffer, sizeof(buffer), "%s/%s", TARGET_TMP, entry->d_name);
+			if (access(buffer, F_OK) == 0) {
+				LOGI("Upgrade module: %s\n", entry->d_name);
+				rm_rf(buffer);
+			} else {
+				LOGI("New module: %s\n", entry->d_name);
+			}
+		}
+	}
+	closedir(dir);
+	clone_dir(SOURCE_TMP, TARGET_TMP);
+
+	// Unmount all loop devices
+	umount_image(SOURCE_TMP, s_loop);
+	umount_image(TARGET_TMP, t_loop);
+	rmdir(SOURCE_TMP);
+	rmdir(TARGET_TMP);
+	free(s_loop);
+	free(t_loop);
+	unlink(source);
+	return 0;
+}
+
+void trim_img(const char *img) {
+	int used, total, new_size;
+	get_img_size(img, &used, &total);
+	new_size = round_size(used);
+	if (new_size != total)
+		resize_img(img, new_size);
 }

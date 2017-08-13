@@ -34,6 +34,9 @@ import multiprocessing
 import zipfile
 import datetime
 import errno
+import shutil
+import lzma
+import base64
 
 def silentremove(file):
 	try:
@@ -45,7 +48,7 @@ def silentremove(file):
 def zip_with_msg(zipfile, source, target):
 	if not os.path.exists(source):
 		error('{} does not exist! Try build \'binary\' and \'apk\' before zipping!'.format(source))
-	print('zip: ' + source + ' -> ' + target)
+	print('zip: {} -> {}'.format(source, target))
 	zipfile.write(source, target)
 
 def build_all(args):
@@ -57,8 +60,11 @@ def build_all(args):
 def build_binary(args):
 	header('* Building Magisk binaries')
 
+	# Force update Android.mk timestamp to trigger recompilation
+	os.utime(os.path.join('jni', 'Android.mk'))
+
 	ndk_build = os.path.join(os.environ['ANDROID_HOME'], 'ndk-bundle', 'ndk-build')
-	debug_flag = '' if args.release else '-DDEBUG'
+	debug_flag = '' if args.release else '-DMAGISK_DEBUG'
 	proc = subprocess.run('{} APP_CFLAGS=\"-DMAGISK_VERSION=\\\"{}\\\" -DMAGISK_VER_CODE={} {}\" -j{}'.format(
 		ndk_build, args.versionString, args.versionCode, debug_flag, multiprocessing.cpu_count()), shell=True)
 	if proc.returncode != 0:
@@ -66,6 +72,20 @@ def build_binary(args):
 
 def build_apk(args):
 	header('* Building Magisk Manager')
+
+	for key in ['public.certificate.x509.pem', 'private.key.pk8']:
+		source = os.path.join('ziptools', key)
+		target = os.path.join('MagiskManager', 'app', 'src', 'main', 'assets', key)
+		print('cp: {} -> {}'.format(source, target))
+		shutil.copyfile(source, target)
+
+	for script in ['magisk_uninstaller.sh', 'util_functions.sh']:
+		source = os.path.join('scripts', script)
+		target = os.path.join('MagiskManager', 'app', 'src', 'main', 'assets', script)
+		print('cp: {} -> {}'.format(source, target))
+		shutil.copyfile(source, target)
+
+	print('')
 
 	os.chdir('MagiskManager')
 	if args.release:
@@ -88,7 +108,7 @@ def build_apk(args):
 
 		proc = subprocess.run([
 			os.path.join(os.environ['ANDROID_HOME'], 'build-tools', build_tool, 'zipalign'),
-			'-v', '-p', '4', unsigned, aligned])
+			'-v', '-p', '4', unsigned, aligned], stdout=subprocess.DEVNULL)
 		if proc.returncode != 0:
 			error('Zipalign Magisk Manager failed!')
 
@@ -113,9 +133,9 @@ def sign_adjust_zip(unsigned, output):
 	header('* Signing / Adjusting Zip')
 
 	# Unsigned->signed
-	proc = subprocess.run(['java', '-jar', os.path.join('ziptools', 'signapk.jar'), 
-		os.path.join('ziptools', 'test.certificate.x509.pem'), 
-		os.path.join('ziptools', 'test.key.pk8'), unsigned, 'tmp_signed.zip'])
+	proc = subprocess.run(['java', '-jar', os.path.join('ziptools', 'signapk.jar'),
+		os.path.join('ziptools', 'public.certificate.x509.pem'),
+		os.path.join('ziptools', 'private.key.pk8'), unsigned, 'tmp_signed.zip'])
 	if proc.returncode != 0:
 		error('First sign flashable zip failed!')
 
@@ -131,9 +151,9 @@ def sign_adjust_zip(unsigned, output):
 		error('Adjust flashable zip failed!')
 
 	# Adjusted -> output
-	proc = subprocess.run(['java', '-jar', os.path.join('ziptools', 'minsignapk.jar'), 
-		os.path.join('ziptools', 'test.certificate.x509.pem'), 
-		os.path.join('ziptools', 'test.key.pk8'), 'tmp_adjusted.zip', output])
+	proc = subprocess.run(['java', '-jar', os.path.join('ziptools', 'minsignapk.jar'),
+		os.path.join('ziptools', 'public.certificate.x509.pem'),
+		os.path.join('ziptools', 'private.key.pk8'), 'tmp_adjusted.zip', output])
 	if proc.returncode != 0:
 		error('Second sign flashable zip failed!')
 
@@ -142,11 +162,46 @@ def sign_adjust_zip(unsigned, output):
 	silentremove('tmp_signed.zip')
 	silentremove('tmp_adjusted.zip')
 
+def gen_update_binary():
+	update_bin = []
+	binary = os.path.join('libs', 'armeabi-v7a', 'b64xz')
+	if not os.path.exists(binary):
+		error('Please build \'binary\' before zipping!')
+	with open(binary, 'rb') as b64xz:
+		update_bin.append('#! /sbin/sh\nEX_ARM=')
+		update_bin.append(''.join("\\\\x{:02X}".format(c) for c in b64xz.read()))
+	binary = os.path.join('libs', 'x86', 'b64xz')
+	with open(binary, 'rb') as b64xz:
+		update_bin.append('\nEX_X86=')
+		update_bin.append(''.join("\\\\x{:02X}".format(c) for c in b64xz.read()))
+	binary = os.path.join('libs', 'armeabi-v7a', 'busybox')
+	with open(binary, 'rb') as busybox:
+		update_bin.append('\nBB_ARM=')
+		update_bin.append(base64.b64encode(lzma.compress(busybox.read())).decode('ascii'))
+	binary = os.path.join('libs', 'x86', 'busybox')
+	with open(binary, 'rb') as busybox:
+		update_bin.append('\nBB_X86=')
+		update_bin.append(base64.b64encode(lzma.compress(busybox.read())).decode('ascii'))
+		update_bin.append('\n')
+	with open(os.path.join('scripts', 'update_binary.sh'), 'r') as script:
+		update_bin.append(script.read())
+	return ''.join(update_bin)
+
 def zip_main(args):
 	header('* Packing Flashable Zip')
 
-	with zipfile.ZipFile('tmp_unsigned.zip', 'w', compression=zipfile.ZIP_DEFLATED) as zipf:
-		# Compiled Binaries
+	with zipfile.ZipFile('tmp_unsigned.zip', 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=False) as zipf:
+		# META-INF
+		# update-binary
+		target = os.path.join('META-INF', 'com', 'google', 'android', 'update-binary')
+		print('zip: ' + target)
+		zipf.writestr(target, gen_update_binary())
+		# updater-script
+		source = os.path.join('scripts', 'flash_script.sh')
+		target = os.path.join('META-INF', 'com', 'google', 'android', 'updater-script')
+		zip_with_msg(zipf, source, target)
+
+		# Binaries
 		for lib_dir, zip_dir in [('arm64-v8a', 'arm64'), ('armeabi-v7a', 'arm'), ('x86', 'x86'), ('x86_64', 'x64')]:
 			for binary in ['magisk', 'magiskboot']:
 				source = os.path.join('libs', lib_dir, binary)
@@ -160,39 +215,26 @@ def zip_main(args):
 		zip_with_msg(zipf, source, target)
 
 		# Scripts
-		# flash_script.sh
-		source = os.path.join('scripts', 'flash_script.sh')
-		with open(source, 'r') as script:
-			# Add version info into flash script
-			update_binary = script.read().replace(
-				'MAGISK_VERSION_STUB', 'Magisk v{} Installer'.format(args.versionString))
-			target = os.path.join('META-INF', 'com', 'google', 'android', 'update-binary')
-			print('zip: ' + source + ' -> ' + target)
-			zipf.writestr(target, update_binary)
-		# addon.d.sh
-		source = os.path.join('scripts', 'addon.d.sh')
-		with open(source, 'r') as script:
-			# Add version info addon.d.sh
-			addond = script.read().replace(
-				'MAGISK_VERSION_STUB', 'Magisk v{} addon.d'.format(args.versionString))
-			target = os.path.join('addon.d', '99-magisk.sh')
-			print('zip: ' + source + ' -> ' + target)
-			zipf.writestr(target, addond)
-		# updater-script
-		target = os.path.join('META-INF', 'com', 'google', 'android', 'updater-script')
-		print('zip: ' + target)
-		zipf.writestr(target, '#MAGISK\n')
-		# init.magisk.rc
-		source = os.path.join('scripts', 'init.magisk.rc')
-		target = os.path.join('common', 'init.magisk.rc')
-		zip_with_msg(zipf, source, target)
 		# boot_patch.sh
 		source = os.path.join('scripts', 'boot_patch.sh')
 		target = os.path.join('common', 'boot_patch.sh')
 		zip_with_msg(zipf, source, target)
 		# util_functions.sh
 		source = os.path.join('scripts', 'util_functions.sh')
-		target = os.path.join('common', 'util_functions.sh')
+		with open(source, 'r') as script:
+			# Add version info util_functions.sh
+			util_func = script.read().replace(
+				'MAGISK_VERSION_STUB', 'MAGISK_VER="{}"\nMAGISK_VER_CODE={}'.format(args.versionString, args.versionCode))
+			target = os.path.join('common', 'util_functions.sh')
+			print('zip: ' + source + ' -> ' + target)
+			zipf.writestr(target, util_func)
+		# addon.d.sh
+		source = os.path.join('scripts', 'addon.d.sh')
+		target = os.path.join('addon.d', '99-magisk.sh')
+		zip_with_msg(zipf, source, target)
+		# init.magisk.rc
+		source = os.path.join('scripts', 'init.magisk.rc')
+		target = os.path.join('common', 'init.magisk.rc')
 		zip_with_msg(zipf, source, target)
 
 		# Prebuilts
@@ -208,8 +250,18 @@ def zip_main(args):
 def zip_uninstaller(args):
 	header('* Packing Uninstaller Zip')
 
-	with zipfile.ZipFile('tmp_unsigned.zip', 'w', compression=zipfile.ZIP_DEFLATED) as zipf:
-		# Compiled Binaries
+	with zipfile.ZipFile('tmp_unsigned.zip', 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=False) as zipf:
+		# META-INF
+		# update-binary
+		target = os.path.join('META-INF', 'com', 'google', 'android', 'update-binary')
+		print('zip: ' + target)
+		zipf.writestr(target, gen_update_binary())
+		# updater-script
+		source = os.path.join('scripts', 'uninstaller_loader.sh')
+		target = os.path.join('META-INF', 'com', 'google', 'android', 'updater-script')
+		zip_with_msg(zipf, source, target)
+
+		# Binaries
 		for lib_dir, zip_dir in [('arm64-v8a', 'arm64'), ('armeabi-v7a', 'arm'), ('x86', 'x86'), ('x86_64', 'x64')]:
 			source = os.path.join('libs', lib_dir, 'magiskboot')
 			target = os.path.join(zip_dir, 'magiskboot')
@@ -219,13 +271,23 @@ def zip_uninstaller(args):
 		target = 'magisk_uninstaller.sh'
 		zip_with_msg(zipf, source, target)
 
-		source = os.path.join('scripts', 'uninstaller_loader.sh')
-		target = os.path.join('META-INF', 'com', 'google', 'android', 'update-binary')
-		zip_with_msg(zipf, source, target)
+		# Scripts
+		# util_functions.sh
+		source = os.path.join('scripts', 'util_functions.sh')
+		with open(source, 'r') as script:
+			# Remove the stub
+			util_func = script.read().replace(
+				'MAGISK_VERSION_STUB', '')
+			target = os.path.join('util_functions.sh')
+			print('zip: ' + source + ' -> ' + target)
+			zipf.writestr(target, util_func)
 
-		target = os.path.join('META-INF', 'com', 'google', 'android', 'updater-script')
-		print('zip: ' + target)
-		zipf.writestr(target, '#MAGISK\n')
+		# Prebuilts
+		for chromeos in ['futility', 'kernel_data_key.vbprivk', 'kernel.keyblock']:
+			source = os.path.join('chromeos', chromeos)
+			zip_with_msg(zipf, source, source)
+
+		# End of zipping
 
 	output = 'Magisk-uninstaller-{}.zip'.format(datetime.datetime.now().strftime('%Y%m%d'))
 	sign_adjust_zip('tmp_unsigned.zip', output)
@@ -270,12 +332,13 @@ apk_parser.set_defaults(func=build_apk)
 
 zip_parser = subparsers.add_parser('zip', help='zip and sign Magisk into a flashable zip')
 zip_parser.add_argument('versionString')
+zip_parser.add_argument('versionCode', type=int)
 zip_parser.set_defaults(func=zip_main)
 
 uninstaller_parser = subparsers.add_parser('uninstaller', help='create flashable uninstaller')
 uninstaller_parser.set_defaults(func=zip_uninstaller)
 
-clean_parser = subparsers.add_parser('clean', help='clean [target...] Targets: binary apk zip (default: all)')
+clean_parser = subparsers.add_parser('clean', help='clean [target...] targets: binary apk zip')
 clean_parser.add_argument('target', nargs='*')
 clean_parser.set_defaults(func=cleanup)
 

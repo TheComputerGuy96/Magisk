@@ -1,46 +1,72 @@
 ##########################################################################################
-# 
+#
 # Magisk General Utility Functions
 # by topjohnwu
-# 
-# Used in flash_script.sh and addon.d.sh
-# 
+#
+# Used in flash_script.sh, addon.d.sh, magisk module installers, and uninstaller
+#
 ##########################################################################################
+
+MAGISK_VERSION_STUB
+SCRIPT_VERSION=$MAGISK_VER_CODE
+
+get_outfd() {
+  readlink /proc/$$/fd/$OUTFD 2>/dev/null | grep /tmp >/dev/null
+  if [ "$?" -eq "0" ]; then
+    OUTFD=0
+
+    for FD in `ls /proc/$$/fd`; do
+      readlink /proc/$$/fd/$FD 2>/dev/null | grep pipe >/dev/null
+      if [ "$?" -eq "0" ]; then
+        ps | grep " 3 $FD " | grep -v grep >/dev/null
+        if [ "$?" -eq "0" ]; then
+          OUTFD=$FD
+          break
+        fi
+      fi
+    done
+  fi
+}
 
 ui_print() {
   if $BOOTMODE; then
     echo "$1"
-  else 
+  else
     echo -n -e "ui_print $1\n" >> /proc/self/fd/$OUTFD
     echo -n -e "ui_print\n" >> /proc/self/fd/$OUTFD
   fi
 }
 
+grep_prop() {
+  REGEX="s/^$1=//p"
+  shift
+  FILES=$@
+  [ -z "$FILES" ] && FILES='/system/build.prop'
+  sed -n "$REGEX" $FILES 2>/dev/null | head -n 1
+}
+
 getvar() {
   local VARNAME=$1
-  local VALUE=$(eval echo \$"$VARNAME");
-  for FILE in /dev/.magisk /data/.magisk /cache/.magisk /system/.magisk; do
-    if [ -z "$VALUE" ]; then
-      LINE=$(cat $FILE 2>/dev/null | grep "$VARNAME=")
-      if [ ! -z "$LINE" ]; then
-        VALUE=${LINE#*=}
-      fi
-    fi
+  local VALUE=$(eval echo \$$VARNAME)
+  [ ! -z $VALUE ] && return
+  for DIR in /dev /data /cache /system; do
+    VALUE=`grep_prop $VARNAME $DIR/.magisk`
+    [ ! -z $VALUE ] && break;
   done
   eval $VARNAME=\$VALUE
 }
 
 find_boot_image() {
   if [ -z "$BOOTIMAGE" ]; then
-    for BLOCK in boot_a BOOT_A kern-a KERN-A android_boot ANDROID_BOOT kernel KERNEL boot BOOT lnx LNX; do
-      BOOTIMAGE=`ls /dev/block/by-name/$BLOCK || ls /dev/block/platform/*/by-name/$BLOCK || ls /dev/block/platform/*/*/by-name/$BLOCK` 2>/dev/null
+    for BLOCK in boot_a kern-a android_boot kernel boot lnx; do
+      BOOTIMAGE=`find /dev/block -iname $BLOCK | head -n 1` 2>/dev/null
       [ ! -z $BOOTIMAGE ] && break
     done
   fi
   # Recovery fallback
   if [ -z "$BOOTIMAGE" ]; then
     for FSTAB in /etc/*fstab*; do
-      BOOTIMAGE=`grep -E '\b/boot\b' $FSTAB | grep -v "#" | grep -oE '/dev/[a-zA-Z0-9_./-]*'`
+      BOOTIMAGE=`grep -v '#' $FSTAB | grep -E '\b/boot\b' | grep -oE '/dev/[a-zA-Z0-9_./-]*'`
       [ ! -z $BOOTIMAGE ] && break
     done
   fi
@@ -54,16 +80,6 @@ is_mounted() {
     cat /proc/mounts | grep $1 >/dev/null
   fi
   return $?
-}
-
-grep_prop() {
-  REGEX="s/^$1=//p"
-  shift
-  FILES=$@
-  if [ -z "$FILES" ]; then
-    FILES='/system/build.prop'
-  fi
-  cat $FILES 2>/dev/null | sed -n "$REGEX" | head -n 1
 }
 
 remove_system_su() {
@@ -105,28 +121,84 @@ api_level_arch_detect() {
   if [ "$ABILONG" = "x86_64" ]; then ARCH=x64; IS64BIT=true; fi;
 }
 
+boot_actions() {
+  if [ ! -d /dev/magisk/mirror/bin ]; then
+    mkdir -p /dev/magisk/mirror/bin
+    mount -o bind $MAGISKBIN /dev/magisk/mirror/bin
+  fi
+  MAGISKBIN=/dev/magisk/mirror/bin
+  $MAGISKBIN/magisk magiskpolicy --live "allow fsck * * *"
+}
+
 recovery_actions() {
   # TWRP bug fix
   mount -o bind /dev/urandom /dev/random
+  # Preserve environment varibles
+  OLD_PATH=$PATH
+  OLD_LD_PATH=$LD_LIBRARY_PATH
+  if [ ! -d $TMPDIR/bin ]; then
+    # Add busybox to PATH
+    mkdir -p $TMPDIR/bin
+    ln -s $MAGISKBIN/busybox $TMPDIR/bin/busybox
+    $MAGISKBIN/busybox --install -s $TMPDIR/bin
+    export PATH=$TMPDIR/bin:$PATH
+  fi
   # Temporarily block out all custom recovery binaries/libs
   mv /sbin /sbin_tmp
   # Add all possible library paths
-  OLD_LD_PATH=$LD_LIBRARY_PATH
   $IS64BIT && export LD_LIBRARY_PATH=/system/lib64:/system/vendor/lib64 || export LD_LIBRARY_PATH=/system/lib:/system/vendor/lib
 }
 
 recovery_cleanup() {
-  mv /sbin_tmp /sbin
-  # Clear LD_LIBRARY_PATH
+  mv /sbin_tmp /sbin 2>/dev/null
   export LD_LIBRARY_PATH=$OLD_LD_PATH
+  [ -z $OLD_PATH ] || export PATH=$OLD_PATH
   ui_print "- Unmounting partitions"
-  umount -l /system
+  umount -l /system 2>/dev/null
   umount -l /vendor 2>/dev/null
-  umount -l /dev/random
+  umount -l /dev/random 2>/dev/null
 }
 
 abort() {
   ui_print "$1"
-  mv /sbin_tmp /sbin 2>/dev/null
+  $BOOTMODE || recovery_cleanup
   exit 1
 }
+
+set_perm() {
+  chown $2:$3 $1 || exit 1
+  chmod $4 $1 || exit 1
+  [ -z $5 ] && chcon -h 'u:object_r:system_file:s0' $1 || chcon -h $5 $1
+}
+
+set_perm_recursive() {
+  find $1 -type d 2>/dev/null | while read dir; do
+    set_perm $dir $2 $3 $4 $6
+  done
+  find $1 -type f -o -type l 2>/dev/null | while read file; do
+    set_perm $file $2 $3 $5 $6
+  done
+}
+
+mktouch() {
+  mkdir -p ${1%/*} 2>/dev/null
+  [ -z $2 ] && touch $1 || echo $2 > $1
+  chmod 644 $1
+}
+
+request_size_check() {
+  reqSizeM=`du -s $1 | cut -f1`
+  reqSizeM=$((reqSizeM / 1024 + 1))
+}
+
+request_zip_size_check() {
+  reqSizeM=`unzip -l "$1" | tail -n 1 | awk '{ print int($1 / 1048567 + 1) }'`
+}
+
+image_size_check() {
+  SIZE="`$MAGISKBIN/magisk --imgsize $IMG`"
+  curUsedM=`echo "$SIZE" | cut -d" " -f1`
+  curSizeM=`echo "$SIZE" | cut -d" " -f2`
+  curFreeM=$((curSizeM - curUsedM))
+}
+

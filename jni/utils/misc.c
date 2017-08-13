@@ -133,7 +133,7 @@ void ps(void (*func)(int)) {
 				func(atoi(entry->d_name));
 		}
 	}
-	
+
 	closedir(dir);
 }
 
@@ -183,7 +183,7 @@ int create_links(const char *bin, const char *path) {
 
 #define DEV_BLOCK "/dev/block"
 
-void unlock_blocks() {	
+void unlock_blocks() {
 	char path[PATH_MAX];
 	DIR *dir;
 	struct dirent *entry;
@@ -221,29 +221,34 @@ void setup_sighandlers(void (*handler)(int)) {
 
 /*
    fd == NULL -> Ignore output
-  *fd == 0    -> Open pipe and set *fd to the read end
-  *fd != 0    -> STDOUT (or STDERR) will be redirected to *fd
+  *fd < 0     -> Open pipe and set *fd to the read end
+  *fd >= 0    -> STDOUT (or STDERR) will be redirected to *fd
+  *cb         -> A callback function which runs after fork
 */
-int run_command(int err, int *fd, const char *path, char *const argv[]) {
+int run_command(int err, int *fd, void (*cb)(void), const char *path, char *const argv[]) {
 	int pipefd[2], writeEnd = -1;
 
 	if (fd) {
-		if (*fd) {
-			writeEnd = *fd;
-		} else {
-			if (pipe(pipefd) == -1)
+		if (*fd < 0) {
+			if (xpipe2(pipefd, O_CLOEXEC) == -1)
 				return -1;
 			writeEnd = pipefd[1];
-			// Give the read end of the pipe
-			*fd = pipefd[0];
+		} else {
+			writeEnd = *fd;
 		}
 	}
 
 	int pid = fork();
 	if (pid != 0) {
-		close(writeEnd);
+		if (fd && *fd < 0) {
+			// Give the read end and close write end
+			*fd = pipefd[0];
+			close(pipefd[1]);
+		}
 		return pid;
 	}
+
+	if (cb) cb();
 
 	if (fd) {
 		xdup2(writeEnd, STDOUT_FILENO);
@@ -278,7 +283,7 @@ int mkdir_p(const char *pathname, mode_t mode) {
 
 int bind_mount(const char *from, const char *to) {
 	int ret = xmount(from, to, NULL, MS_BIND, NULL);
-#ifdef DEBUG
+#ifdef MAGISK_DEBUG
 	LOGD("bind_mount: %s -> %s\n", from, to);
 #else
 	LOGI("bind_mount: %s\n", to);

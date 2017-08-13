@@ -55,24 +55,19 @@ typedef enum {
     TEST,
     PATCH,
     BACKUP,
-    RESTORE
+    RESTORE,
+    STOCKSHA1
 } command_t;
 
 extern char *SUP_LIST[];
 extern char *SUP_EXT_LIST[];
 extern file_t SUP_TYPE_LIST[];
 
-// Global variables
-extern unsigned char *kernel, *ramdisk, *second, *dtb, *extra;
-extern boot_img_hdr hdr;
-extern file_t ramdisk_type;
-extern int mtk_kernel, mtk_ramdisk;
-
 // Main entries
 void unpack(const char *image);
 void repack(const char* orig_image, const char* out_image);
 void hexpatch(const char *image, const char *from, const char *to);
-void parse_img(unsigned char *orig, size_t size);
+int parse_img(unsigned char *orig, size_t size);
 int cpio_commands(const char *command, int argc, char *argv[]);
 void cleanup();
 
@@ -95,6 +90,5 @@ void write_zero(int fd, size_t size);
 void mem_align(size_t *pos, size_t align);
 void file_align(int fd, size_t align, int out);
 int open_new(const char *filename);
-void print_info();
 
 #endif

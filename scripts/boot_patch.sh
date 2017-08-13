@@ -3,21 +3,23 @@
 #
 # Magisk Boot Image Patcher
 # by topjohnwu
-# 
-# This script should be placed in a directory with at least the following files:
-# 
+#
+# This script should be placed in a directory with the following files:
+#
 # File name       type      Description
-# 
+#
 # boot_patch.sh   script    A script to patch boot. Expect path to boot image as parameter.
 #               (this file) The script will use binaries and files in its same directory
 #                           to complete the patching process
 # magisk          binary    The main binary for all Magisk operations.
 #                           It is also used to patch the sepolicy in the ramdisk.
 # magiskboot      binary    A tool to unpack boot image, decompress ramdisk, extract ramdisk
-#                           and patch common patches such as forceencrypt, remove dm-verity.
+#                           , and patch the ramdisk for Magisk support
 # init.magisk.rc  script    A new line will be added to init.rc to import this script.
 #                           All magisk entrypoints are defined here
-# 
+# chromeos        folder    This folder should store all the utilities and keys to sign
+#               (optional)  a chromeos device, used in the tablet Pixel C
+#
 # If the script is not running as root, then the input boot image should be a stock image
 # or have a backup included in ramdisk internally, since we cannot access the stock boot
 # image placed under /data we've created when previously installing
@@ -104,7 +106,7 @@ fi
 [ -z $KEEPFORCEENCRYPT ] && KEEPFORCEENCRYPT=false
 
 # Detect whether running as root
-[ `id -u` -eq 0 ] && ROOT=true || ROOT=false
+id | grep "uid=0" >/dev/null 2>&1 && ROOT=true || ROOT=false
 
 # Switch to the location of the script file
 [ -z $SOURCEDMODE ] && cd "`dirname_wrap "${BASH_SOURCE:-$0}"`"
@@ -117,15 +119,19 @@ chmod +x ./*
 ui_print_wrap "- Unpacking boot image"
 ./magiskboot --unpack "$BOOTIMAGE"
 
+CHROMEOS=false
 case $? in
   1 )
     abort_wrap "! Unable to unpack boot image"
     ;;
   2 )
+    CHROMEOS=true
+    ;;
+  3 )
     ui_print_wrap "! Sony ELF32 format detected"
     abort_wrap "! Please use BootBridge from @AdrianDC to flash Magisk"
     ;;
-  3 )
+  4 )
     ui_print_wrap "! Sony ELF64 format detected"
     abort_wrap "! Stock kernel cannot be patched, please use a custom kernel"
 esac
@@ -141,7 +147,7 @@ case $? in
   0 )  # Stock boot
     ui_print_wrap "- Stock boot image detected!"
     ui_print_wrap "- Backing up stock boot image"
-    SHA1=`./magiskboot --sha1 "$BOOTIMAGE" | tail -n 1`
+    SHA1=`./magiskboot --sha1 "$BOOTIMAGE" 2>/dev/null`
     STOCKDUMP=stock_boot_${SHA1}.img
     dd if="$BOOTIMAGE" of=$STOCKDUMP
     ./magiskboot --compress $STOCKDUMP
@@ -150,12 +156,7 @@ case $? in
   1 )  # Magisk patched
     ui_print_wrap "- Magisk patched image detected!"
     # Find SHA1 of stock boot image
-    if [ -z $SHA1 ]; then
-      ./magiskboot --cpio-extract ramdisk.cpio init.magisk.rc init.magisk.rc.old
-      SHA1=`grep_prop "# STOCKSHA1" init.magisk.rc.old`
-      rm -f init.magisk.rc.old
-    fi
-
+    [ -z $SHA1 ] && SHA1=`./magiskboot --cpio-stocksha1 ramdisk.cpio`
     OK=false
     ./magiskboot --cpio-restore ramdisk.cpio
     if [ $? -eq 0 ]; then
@@ -230,5 +231,17 @@ A1020054011440B93FA00F7140020054010840B93FA00F71E0010054001840B91FA00F7181010054
 
 ui_print_wrap "- Repacking boot image"
 ./magiskboot --repack "$BOOTIMAGE" || abort_wrap "! Unable to repack boot image!"
+
+# Sign chromeos boot
+if $CHROMEOS; then
+  echo > empty
+
+  ./chromeos/futility vbutil_kernel --pack new-boot.img.signed \
+  --keyblock ./chromeos/kernel.keyblock --signprivate ./chromeos/kernel_data_key.vbprivk \
+  --version 1 --vmlinuz new-boot.img --config empty --arch arm --bootloader empty --flags 0x1
+
+  rm -f empty new-boot.img
+  mv new-boot.img.signed new-boot.img
+fi
 
 ./magiskboot --cleanup

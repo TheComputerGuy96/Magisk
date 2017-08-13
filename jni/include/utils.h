@@ -31,7 +31,7 @@ int xopen3(const char *pathname, int flags, mode_t mode);
 ssize_t xwrite(int fd, const void *buf, size_t count);
 ssize_t xread(int fd, void *buf, size_t count);
 ssize_t xxread(int fd, void *buf, size_t count);
-int xpipe(int pipefd[2]);
+int xpipe2(int pipefd[2], int flags);
 int xsetns(int fd, int nstype);
 DIR *xopendir(const char *name);
 struct dirent *xreaddir(DIR *dirp);
@@ -82,7 +82,7 @@ void ps_filter_proc_name(const char *filter, void (*func)(int));
 int create_links(const char *bin, const char *path);
 void unlock_blocks();
 void setup_sighandlers(void (*handler)(int));
-int run_command(int err, int *fd, const char *path, char *const argv[]);
+int run_command(int err, int *fd, void (*cb)(void), const char *path, char *const argv[]);
 int mkdir_p(const char *pathname, mode_t mode);
 int bind_mount(const char *from, const char *to);
 int open_new(const char *filename);
@@ -95,10 +95,17 @@ void get_client_cred(int fd, struct ucred *cred);
 int switch_mnt_ns(int pid);
 
 // img.c
+
+#define round_size(a) ((((a) / 32) + 2) * 32)
+#define SOURCE_TMP "/dev/source"
+#define TARGET_TMP "/dev/target"
+
 int create_img(const char *img, int size);
 int get_img_size(const char *img, int *used, int *total);
 int resize_img(const char *img, int size);
 char *mount_image(const char *img, const char *target);
 void umount_image(const char *target, const char *device);
+int merge_img(const char *source, const char *target);
+void trim_img(const char *img);
 
 #endif

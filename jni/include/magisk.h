@@ -10,13 +10,11 @@
 #include <pthread.h>
 #include <android/log.h>
 
-#define MAGISK_VER_STR  xstr(MAGISK_VERSION) ":MAGISK"
-
 #define str(a) #a
 #define xstr(a) str(a)
 
+#define MAGISK_VER_STR  xstr(MAGISK_VERSION) ":MAGISK"
 #define REQUESTOR_DAEMON_PATH     "\0MAGISK"
-#define REQUESTOR_DAEMON_PATH_LEN 7
 
 #define LOG_TAG    "Magisk"
 
@@ -40,6 +38,7 @@
 #define MAGISKTMP       "/dev/magisk"
 #define MIRRDIR         MAGISKTMP "/mirror"
 #define DUMMDIR         MAGISKTMP "/dummy"
+#define BBPATH          MAGISKTMP "/bin"
 #define CACHEMOUNT      "/cache/magisk_mount"
 
 #define SELINUX_PATH        "/sys/fs/selinux/"
@@ -60,7 +59,7 @@ static inline void do_nothing() {}
 // Dummy function to depress debug message
 static inline void stub(const char *fmt, ...) {}
 
-#ifdef DEBUG
+#ifdef MAGISK_DEBUG
 #define LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #else
 #define LOGD(...)  stub(__VA_ARGS__)
