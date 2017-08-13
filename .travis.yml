@@ -20,4 +20,4 @@ env:
   global:
     - ANDROID_HOME=${TRAVIS_BUILD_DIR}/android-sdk
 
-script: python3 TheComputerGuy96/Magisk/build.py all 13.6 1360
+script: python3 ${TRAVIS_BUILD_DIR}/TheComputerGuy96/Magisk/build.py all 13.6 1360
