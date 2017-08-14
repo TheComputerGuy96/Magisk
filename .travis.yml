@@ -17,9 +17,9 @@ before_script:
     - echo y | sdkmanager "build-tools;26.0.1"
     - echo y | sdkmanager "extras;android;m2repository"
     - echo y | sdkmanager ndk-bundle
-    - add-apt-repository ppa:jonathonf/python-3.6
-    - apt-get update
-    - apt-get install python3.6
+    - sudo add-apt-repository ppa:jonathonf/python-3.6
+    - sudo apt-get update
+    - sudo apt-get install python3.6
 
 env:
   global:
