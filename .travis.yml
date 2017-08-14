@@ -14,10 +14,7 @@ android:
     - tools
 
 before_script:
-    - echo y | sdkmanager --update "extras;google;m2repository"
-    - echo y | sdkmanager --update platform-tools
-    - echo y | sdkmanager --update "platforms;android-26"
-    - echo y | sdkmanager --update tools
+    - echo y | sdkmanager --update
     - echo y | sdkmanager "build-tools;26.0.1"
     - echo y | sdkmanager "extras;android;m2repository"
     - echo y | sdkmanager ndk-bundle
