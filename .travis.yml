@@ -1,6 +1,5 @@
 language: android
 
-compiler: gcc
 dist: trusty
 jdk: oraclejdk8
 sudo: required
@@ -45,6 +44,6 @@ after_success:
   - git add ${FILES}
   - git commit -m ${MESSAGE}
   - git push "https://${TRAVIS_SECURE_TOKEN_NAME}@${GH_REPO}" master 2>&1 && touch .push_success
-  - [ -f .push_success] && echo "Magisk files have been successfully pushed to GitHub"
-  - [ -f .push_success] && echo "GitHub repository link: https://${GH_REPO}"
+  - '[ -f .push_success] && echo "Magisk files have been successfully pushed to GitHub"'
+  - '[ -f .push_success] && echo "GitHub repository link: https://${GH_REPO}"'
   - rm -f .push_success
