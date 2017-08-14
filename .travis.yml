@@ -1,25 +1,50 @@
 language: android
 
+compiler: gcc
+dist: trusty
 jdk: oraclejdk8
 sudo: required
-dist: trusty
-compiler: gcc
 
 android:
   components:
     - tools
 
 before_script:
-    - sleep 3; echo y | sdkmanager --update
-    - (while sleep 3; do echo "y"; done) | sdkmanager "build-tools;26.0.1" "extras;android;m2repository" "ndk-bundle"
-    - echo | sudo add-apt-repository ppa:jonathonf/python-3.6
-    - sudo apt-get update
-    - sudo apt-get install -y python3.6
+  - sleep 3; echo y | sdkmanager --update
+  - (while sleep 3; do echo "y"; done) | sdkmanager "build-tools;26.0.1" "extras;android;m2repository" "ndk-bundle"
+  - echo | sudo add-apt-repository ppa:jonathonf/python-3.6
+  - sudo apt-get update
+  - sudo apt-get install -y python3.6
 
 env:
   global:
     - ANDROID_HOME=/usr/local/android-sdk
+    - EMAIL="tcg96nougat@gmail.com"
+    - FILES=Magisk-*.zip
+    - GH_REPO="github.com/TheComputerGuy96/${REPO}.git"
+    - MAGISK_DATE=$(date -u +%Y%m%d)
+    - MAGISK_MESSAGE="${MAGISK_DATE} build"
+    - MAGISK_VER_CODE=1360
+    - MAGISK_VER_STRING=13.6
     - PATH=/usr/local/android-sdk/ndk-bundle:${PATH}
+    - REPO="MagiskFiles"
+    - USER="DodoGTA GT"
+    - secure: fnWODydqfiE3knU7wxMUhLSeMZdFc+KUYcYiEfQ0/7BpOK6gbRNmkWZYhbI1Enfhg9opKhNjTTT57Scw8SZiCA8OorY6LWMIMviwRqOsdZlHoJzNVxD4ratKbIJjjsqwwif9oRVf9OLQ4xgP8GarSGlmpL7i1quhp7PlvDuxlzFrkExg8o+YVNDpOCvEFLLdoEK+fSRGhhAnEGgn91GMHhyX7k2yrDxRJz5Bg+I7FcI8eUV4v4E2P0dmSy94NHW/qz6Pwoxn3t82JLwnJtMgDWhiGBuY5Trb3X6nSkQa05nAP2PXCwCznPHOfMen8xBbS0NeYhS/S/R6G/q+JW4n0MmDm2RYH4E3o63A4mlTUQBFWb/H3p+o4p7JLVnR3fWAo356RjTxNrg3Rnz/wMHXZd16EFGSssobSW0bDXcRiWEx3ZAYp0AmOU9QONr1Nrzjxz++FfdkCgzfGe2iAlApIEyJCVo3aS1LWcFkRApuYHvteycpAkkGE8jGQfwHs4a1IF+mnhhFWf+s1acoPxbAiFPU6gx1++9rxzxbnQxdfX8z0LiI1C/il8kwCKczFqL/HRlW41S3oVwx31Y1n/9M9a6VSZo1K7gBBpo6KFWQZP3xH3Oso5Hq0kimWnW1dMCE41ohnaT0/hdWLkjoUsdHrd0Qz3LIwtTPO4mZZzIqfbU=
 
 script:
-    - python3.6 ${TRAVIS_BUILD_DIR}/build.py all 13.6 1360
+  - time python3.6 ${TRAVIS_BUILD_DIR}/build.py all ${MAGISK_VER_STRING} ${MAGISK_VER_CODE} && echo "Magisk has been successfully built"
+
+after_success:
+  - git clone git://${GH_REPO}
+  - mv -f Magisk-v${MAGISK_VER_STRING}.zip Magisk-v${MAGISK_VER_STRING}-${MAGISK_DATE}.zip
+  - rm -f Magisk-v${MAGISK_VER_STRING}.zip
+  - mv -f ${FILES} ${REPO}
+  - cd ${REPO}
+  - git config user.email ${EMAIL}
+  - git config user.name ${USER}
+  - git add ${FILES}
+  - git commit -m ${MESSAGE}
+  - git push "https://${TRAVIS_SECURE_TOKEN_NAME}@${GH_REPO}" master 2>&1 && touch .push_success
+  - [ -f .push_success] && echo "Magisk files have been successfully pushed to GitHub"
+  - [ -f .push_success] && echo "GitHub repository link: https://${GH_REPO}"
+  - rm -f .push_success
