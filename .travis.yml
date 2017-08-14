@@ -18,6 +18,7 @@ before_script:
     - echo y | sdkmanager "build-tools;26.0.1"
     - echo y | sdkmanager "extras;android;m2repository"
     - echo y | sdkmanager ndk-bundle
+    - source ~/virtualenv/python3.6/bin/activate
 
 env:
   global:
