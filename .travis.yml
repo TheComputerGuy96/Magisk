@@ -11,13 +11,22 @@ python:
 android:
   components:
     - tools
-    - platform-tools
-    - build-tools-26.0.1
-    - android-26
-    - ndk-bundle
+
+after_install:
+    - echo y | sdkmanager --update extras;google;m2repository
+    - echo y | sdkmanager --update platform-tools
+    - echo y | sdkmanager --update platforms;android-26
+    - echo y | sdkmanager --update tools
+    - echo y | sdkmanager build-tools;26.0.1
+    - echo y | sdkmanager extras;android;m2repository
+    - echo y | sdkmanager ndk-bundle
 
 env:
   global:
-    - ANDROID_HOME=${TRAVIS_BUILD_DIR}/android-sdk
+    - ANDROID_HOME=/usr/local/android-sdk
+    - PATH=/usr/local/android-sdk/ndk-bundle:${PATH}
 
-script: python3 ${TRAVIS_BUILD_DIR}/TheComputerGuy96/Magisk/build.py all 13.6 1360
+script:
+    - cd ${TRAVIS_BUILD_DIR}
+    - ls -l
+    - python3 ${TRAVIS_BUILD_DIR}/build.py all 13.6 1360
