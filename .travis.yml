@@ -20,10 +20,10 @@ env:
     - ANDROID_HOME=/usr/local/android-sdk
     - GH_EMAIL="tcg96nougat@gmail.com"
     - GH_FULLNAME="DodoGTA GT"
-    - GH_MAGISKFILES_REPO="github.com/${GH_USERNAME}/${MAGISKFILES_NAME}.git"
+    - GH_MAGISKFILES_REPO=github.com/${GH_USERNAME}/${MAGISKFILES_NAME}.git
     - GH_USERNAME=TheComputerGuy96
     - MAGISK_DATE=$(date -u +%Y%m%d)
-    - MAGISK_MESSAGE="${MAGISK_DATE} build"
+    - MAGISK_MESSAGE=${MAGISK_DATE}\ build
     - MAGISK_VER_CODE=1360
     - MAGISK_VER_STRING=13.6
     - MAGISK_ZIPFILES=Magisk-*.zip
@@ -43,7 +43,7 @@ after_success:
   - git config user.email "${GH_EMAIL}"
   - git config user.name "${GH_FULLNAME}"
   - git add ${MAGISK_ZIPFILES}
-  - git commit -m ${MAGISK_MESSAGE}
+  - git commit -m "${MAGISK_MESSAGE}"
   - git push "https://${GH_USERNAME}:${GH_PUSH_TOKEN}@${GH_MAGISKFILES_REPO}" master 2>&1 && touch .push_success
   - '[ -f .push_success ] && echo "Magisk files have been successfully pushed to GitHub"'
   - '[ -f .push_success ] && echo "GitHub repository link: https://${GH_MAGISKFILES_REPO}"'
