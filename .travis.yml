@@ -7,7 +7,6 @@ compiler: gcc
 
 python:
     - "3.6"
-    - "2.7"
 
 android:
   components:
@@ -18,7 +17,9 @@ before_script:
     - echo y | sdkmanager "build-tools;26.0.1"
     - echo y | sdkmanager "extras;android;m2repository"
     - echo y | sdkmanager ndk-bundle
-    - source ~/virtualenv/python3.6/bin/activate
+    - add-apt-repository ppa:jonathonf/python-3.6
+    - apt-get update
+    - apt-get install python3.6
 
 env:
   global:
