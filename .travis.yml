@@ -1,0 +1,26 @@
+language: android
+
+dist: trusty
+jdk: oraclejdk8
+sudo: required
+
+android:
+  components:
+    - tools
+
+before_script:
+  - sleep 3; echo "y" | sdkmanager --update
+  - (while true; do echo "y"; sleep 3; done) | sdkmanager "build-tools;26.0.2" "extras;android;m2repository" "ndk-bundle" > /dev/null
+  - echo | sudo add-apt-repository ppa:jonathonf/python-3.6
+  - sudo apt-get update
+  - sudo apt-get install -y python3.6
+
+env:
+  global:
+    - ANDROID_HOME=/usr/local/android-sdk
+    - MAGISK_VER_INTEGER=1430
+    - MAGISK_VER_STRING=14.3
+    - PATH=/usr/local/android-sdk/ndk-bundle:${PATH}
+
+script:
+  - time python3.6 ${TRAVIS_BUILD_DIR}/build.py all ${MAGISK_VER_STRING} ${MAGISK_VER_INTEGER} && echo "Magisk has been successfully built"
