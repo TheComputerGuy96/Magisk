@@ -10,7 +10,7 @@ android:
 
 before_script:
   - sleep 3; echo "y" | sdkmanager --update
-  - (while true; do echo "y"; sleep 3; done) | sdkmanager "build-tools;26.0.2" "extras;android;m2repository" "ndk-bundle"
+  - (while true; do echo "y"; sleep 3; done) | sdkmanager "build-tools;26.0.2" "extras;android;m2repository" "ndk-bundle" > /dev/null
   - echo | sudo add-apt-repository ppa:jonathonf/python-3.6
   - sudo apt-get update
   - sudo apt-get install -y python3.6
