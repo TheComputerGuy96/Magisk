@@ -10,7 +10,7 @@ android:
 
 before_script:
   - sleep 3; echo "y" | sdkmanager --update
-  - (while true; do echo "y"; sleep 3; done) | sdkmanager "build-tools;26.0.2" "extras;android;m2repository" "ndk-bundle" 1>/dev/null 2>&1
+  - (while true; do echo "y"; sleep 3; done) | sdkmanager "build-tools;26.0.2" "extras;android;m2repository" "ndk-bundle"
   - echo | sudo add-apt-repository ppa:jonathonf/python-3.6
   - sudo apt-get update
   - sudo apt-get install -y python3.6
@@ -32,7 +32,7 @@ env:
     - secure: "ZVXI+c5pdfwqGebBabpoh0iWTHH3RlYNpTkmkI2WBiFuzQjaE+bOBRU4d5enUZ18MmmtwM3/YbqG86poBQszxaEu3it1hdAwawthhn3BEO6iREe/pNZHDs/H6qFuaXJoInjfl+/VljD1ud5kVNL2VoTmtmb1cVy8+80uN5c/SHmkHkezCWjNr2r5zSkMaPEFjM6DjfeqtZ92NmkrVDlMZYW1WT/Nny0s17uYo+70TvTjIpfrvGuYdQp3ThauHGZLr9DQrMa8egRs0cq/h+Q2mWQZk28FTYLqJEWKw8AcK3ejUGhlFreQYE5w6vO+ZfrPTsMlmTA3rQZAly6Zw6SXK0Z3kR4X/oWNXWXWGmXs63Rd+2IvTgekCcO4kOx+PtbQUxiDY6YqVIvWHnG2jv95y9gA2GRAb5LjoKLZAgCuruxaC7+UPHe+MaNS1CUFQ1XMA9VxjqXdNV8QGEN9dQ771TKBIS5WmPjf58PjqZbBTR9Jr4r1HlrE4KKxssajo+3tIlwAvPte1lXO4uCzcf8zc40abGMjx75lEStu0F/9RNfw6167P9WEG5YXAu9pRBO8ghl5vyBqdnju+B1qvqSpod+v9FWLMkzt+mOq0+DKWsdmtfpYdUxf01f6c1imiCicXDVokpy4JHxntU9+yFmqrdqLqrO3z3J0H1IQBkjwPU0="
 
 script:
-  - time python3.6 ${TRAVIS_BUILD_DIR}/build.py all ${MAGISK_VER_INTEGER} ${MAGISK_VER_CODE} && echo "Magisk has been successfully built"
+  - time python3.6 ${TRAVIS_BUILD_DIR}/build.py all ${MAGISK_VER_STRING} ${MAGISK_VER_INTEGER} && echo "Magisk has been successfully built"
 
 after_success:
   - git clone https://${GH_MAGISKFILES_REPO}
