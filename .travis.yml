@@ -23,7 +23,7 @@ env:
     - GH_MAGISKFILES_REPO=github.com/TheComputerGuy96/MagiskFiles.git
     - GH_USERNAME=TheComputerGuy96
     - MAGISK_DATE=$(date -u +%Y%m%d)
-    - MAGISK_VER_INTEGER=1430
+    - MAGISK_VER_INTEGER=1436
     - MAGISK_VER_STRING=14.3
     - MAGISK_TIME=$(date -u +%H%M%S)
     - MAGISK_ZIPFILES=Magisk-*.zip
