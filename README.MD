@@ -1,4 +1,5 @@
 # Magisk
+![Travis-CI](https://api.travis-ci.org/TheComputerGuy96/Magisk.svg?branch=travisci-dev)
 
 ## How to build Magisk
 
