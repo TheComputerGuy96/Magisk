@@ -18,13 +18,13 @@ before_script:
 env:
   global:
     - ANDROID_HOME=/usr/local/android-sdk
-    - GH_EMAIL="tcg96nougat@gmail.com"
-    - GH_FULLNAME="DodoGTA GT"
+    - GH_EMAIL="git@jongma.org"
+    - GH_FULLNAME="Jorrit Jongma"
     - GH_MAGISKFILES_REPO=github.com/TheComputerGuy96/MagiskFiles.git
     - GH_USERNAME=TheComputerGuy96
     - MAGISK_DATE=$(date -u +%Y%m%d)
-    - MAGISK_VER_INTEGER=1430
-    - MAGISK_VER_STRING=14.3
+    - MAGISK_VER_INTEGER=2069
+    - MAGISK_VER_STRING=20.5
     - MAGISK_TIME=$(date -u +%H%M%S)
     - MAGISK_ZIPFILES=Magisk-*.zip
     - MAGISKFILES_NAME=MagiskFiles
@@ -32,12 +32,12 @@ env:
     - secure: "ZVXI+c5pdfwqGebBabpoh0iWTHH3RlYNpTkmkI2WBiFuzQjaE+bOBRU4d5enUZ18MmmtwM3/YbqG86poBQszxaEu3it1hdAwawthhn3BEO6iREe/pNZHDs/H6qFuaXJoInjfl+/VljD1ud5kVNL2VoTmtmb1cVy8+80uN5c/SHmkHkezCWjNr2r5zSkMaPEFjM6DjfeqtZ92NmkrVDlMZYW1WT/Nny0s17uYo+70TvTjIpfrvGuYdQp3ThauHGZLr9DQrMa8egRs0cq/h+Q2mWQZk28FTYLqJEWKw8AcK3ejUGhlFreQYE5w6vO+ZfrPTsMlmTA3rQZAly6Zw6SXK0Z3kR4X/oWNXWXWGmXs63Rd+2IvTgekCcO4kOx+PtbQUxiDY6YqVIvWHnG2jv95y9gA2GRAb5LjoKLZAgCuruxaC7+UPHe+MaNS1CUFQ1XMA9VxjqXdNV8QGEN9dQ771TKBIS5WmPjf58PjqZbBTR9Jr4r1HlrE4KKxssajo+3tIlwAvPte1lXO4uCzcf8zc40abGMjx75lEStu0F/9RNfw6167P9WEG5YXAu9pRBO8ghl5vyBqdnju+B1qvqSpod+v9FWLMkzt+mOq0+DKWsdmtfpYdUxf01f6c1imiCicXDVokpy4JHxntU9+yFmqrdqLqrO3z3J0H1IQBkjwPU0="
 
 script:
-  - time python3.6 ${TRAVIS_BUILD_DIR}/build.py all ${MAGISK_VER_STRING} ${MAGISK_VER_INTEGER} && echo "Magisk has been successfully built"
+  - time python3.6 ${TRAVIS_BUILD_DIR}/build.py all ${MAGISK_VER_STRING} ${MAGISK_VER_INTEGER} && echo "Teh Magisk kangaroo robot edition has been successfully assembled for you, Skittles9823"
 
 after_success:
   - git clone https://${GH_MAGISKFILES_REPO}
-  - mv -f Magisk-uninstaller-${MAGISK_DATE}.zip Magisk-uninstaller-${MAGISK_DATE}-${MAGISK_TIME}.zip
-  - mv -f Magisk-v${MAGISK_VER_STRING}.zip Magisk-v${MAGISK_VER_STRING}-${MAGISK_DATE}-${MAGISK_TIME}.zip
+  - mv -f Magisk-uninstaller-${MAGISK_DATE}.zip Magisk-uninstaller-${MAGISK_DATE}-${MAGISK_TIME}-Skittles9823joke.zip
+  - mv -f Magisk-v${MAGISK_VER_STRING}.zip Magisk-v${MAGISK_VER_STRING}-${MAGISK_DATE}-${MAGISK_TIME}-Skittles9823joke.zip
   - rm -f Magisk-uninstaller-${MAGISK_DATE}.zip
   - rm -f Magisk-v${MAGISK_VER_STRING}.zip
   - mv -f ${MAGISK_ZIPFILES} ${MAGISKFILES_NAME}/
@@ -45,8 +45,8 @@ after_success:
   - git config user.email "${GH_EMAIL}"
   - git config user.name "${GH_FULLNAME}"
   - git add ${MAGISK_ZIPFILES}
-  - git commit -m "${MAGISK_DATE}-${MAGISK_TIME} build"
-  - git push "https://${GH_USERNAME}:${GH_PUSH_TOKEN}@${GH_MAGISKFILES_REPO}" master 2>&1 && touch .push_success
-  - '[ -f .push_success ] && echo "Magisk files have been successfully pushed to GitHub"'
+  - git commit -m "${MAGISK_DATE}-${MAGISK_TIME} kangaroo robot edition build"
+  - git push "https://TheComputerGuy96:${GH_PUSH_TOKEN}@${GH_MAGISKFILES_REPO}" master 2>&1 && touch .push_success
+  - '[ -f .push_success ] && echo "Teh Magisk kangaroo robot edition files have been successfully pushed to GitHub DNA drives"'
   - '[ -f .push_success ] && echo "GitHub repository link: https://${GH_MAGISKFILES_REPO}"'
   - rm -f .push_success
