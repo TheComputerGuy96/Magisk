@@ -6,8 +6,6 @@
 
 #include <stdio.h>
 #include <dirent.h>
-#include <pthread.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 
@@ -18,8 +16,6 @@
 #define UID_SYSTEM (get_system_uid())
 #define UID_RADIO  (get_radio_uid())
 
-extern int quit_signals[];
-
 // xwrap.c
 
 FILE *xfopen(const char *pathname, const char *mode);
@@ -28,12 +24,14 @@ FILE *xfdopen(int fd, const char *mode);
 #define xopen(...) GET_MACRO(__VA_ARGS__, xopen3, xopen2)(__VA_ARGS__)
 int xopen2(const char *pathname, int flags);
 int xopen3(const char *pathname, int flags, mode_t mode);
+int xopenat(int dirfd, const char *pathname, int flags);
 ssize_t xwrite(int fd, const void *buf, size_t count);
 ssize_t xread(int fd, void *buf, size_t count);
 ssize_t xxread(int fd, void *buf, size_t count);
 int xpipe2(int pipefd[2], int flags);
 int xsetns(int fd, int nstype);
 DIR *xopendir(const char *name);
+DIR *xfdopendir(int fd);
 struct dirent *xreaddir(DIR *dirp);
 pid_t xsetsid();
 int xsocket(int domain, int type, int protocol);
@@ -53,21 +51,25 @@ int xstat(const char *pathname, struct stat *buf);
 int xlstat(const char *pathname, struct stat *buf);
 int xdup2(int oldfd, int newfd);
 ssize_t xreadlink(const char *pathname, char *buf, size_t bufsiz);
+ssize_t xreadlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz);
 int xsymlink(const char *target, const char *linkpath);
 int xmount(const char *source, const char *target,
 	const char *filesystemtype, unsigned long mountflags,
 	const void *data);
 int xumount(const char *target);
 int xumount2(const char *target, int flags);
-int xchmod(const char *pathname, mode_t mode);
 int xrename(const char *oldpath, const char *newpath);
 int xmkdir(const char *pathname, mode_t mode);
+int xmkdir_p(const char *pathname, mode_t mode);
+int xmkdirat(int dirfd, const char *pathname, mode_t mode);
 void *xmmap(void *addr, size_t length, int prot, int flags,
 	int fd, off_t offset);
 ssize_t xsendfile(int out_fd, int in_fd, off_t *offset, size_t count);
-int xmkdir_p(const char *pathname, mode_t mode);
+pid_t xfork();
 
 // misc.c
+
+extern int quit_signals[];
 
 unsigned get_shell_uid();
 unsigned get_system_uid();
@@ -82,14 +84,38 @@ void unlock_blocks();
 void setup_sighandlers(void (*handler)(int));
 int exec_command(int err, int *fd, void (*setupenv)(struct vector*), const char *argv0, ...);
 int exec_command_sync(char *const argv0, ...);
-int mkdir_p(const char *pathname, mode_t mode);
 int bind_mount(const char *from, const char *to);
 int open_new(const char *filename);
-int cp_afc(const char *source, const char *target);
-void fclone_attr(const int sourcefd, const int targetfd);
-void clone_attr(const char *source, const char *target);
 void get_client_cred(int fd, struct ucred *cred);
 int switch_mnt_ns(int pid);
+int fork_dont_care();
+
+// file.c
+
+extern char **excl_list;
+
+struct file_attr {
+	struct stat st;
+	char con[128];
+};
+
+int fd_getpath(int fd, char *path, size_t size);
+int mkdir_p(const char *pathname, mode_t mode);
+void rm_rf(const char *path);
+void frm_rf(int dirfd);
+void mv_f(const char *source, const char *destination);
+void mv_dir(int src, int dest);
+void cp_afc(const char *source, const char *destination);
+void clone_dir(int src, int dest);
+int getattr(const char *path, struct file_attr *a);
+int getattrat(int dirfd, const char *pathname, struct file_attr *a);
+int fgetattr(int fd, struct file_attr *a);
+int setattr(const char *path, struct file_attr *a);
+int setattrat(int dirfd, const char *pathname, struct file_attr *a);
+int fsetattr(int fd, struct file_attr *a);
+void fclone_attr(const int sourcefd, const int targetfd);
+void clone_attr(const char *source, const char *target);
+void restorecon(int dirfd, int force);
 
 // img.c
 

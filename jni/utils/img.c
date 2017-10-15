@@ -2,6 +2,7 @@
  */
 
 #include <unistd.h>
+#include <libgen.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/mount.h>
@@ -51,20 +52,13 @@ static char *loopsetup(const char *img) {
 int create_img(const char *img, int size) {
 	unlink(img);
 	LOGI("Create %s with size %dM\n", img, size);
-	// Create a temp file with the file contexts
-	char file_contexts[] = "/magisk(/.*)? u:object_r:system_file:s0\n";
-	// If not root, attempt to create in current diretory
-	char *filename = getuid() == UID_ROOT ? "/dev/file_contexts_image" : "file_contexts_image";
-	int ret, fd = xopen(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	xwrite(fd, file_contexts, sizeof(file_contexts));
-	close(fd);
+	int ret;
 
 	char buffer[16];
 	snprintf(buffer, sizeof(buffer), "%dM", size);
-	ret = exec_command_sync("make_ext4fs", "-l", buffer, "-a", "/magisk", "-S", filename, img, NULL);
+	ret = exec_command_sync("make_ext4fs", "-l", buffer, img, NULL);
 	if (ret < 0)
 		return 1;
-	unlink(filename);
 	return ret;
 }
 
@@ -103,7 +97,7 @@ int resize_img(const char *img, int size) {
 	if (e2fsck(img))
 		return 1;
 	char buffer[128];
-	int pid, status, fd = -1;
+	int pid, fd = -1, used, total;
 	snprintf(buffer, sizeof(buffer), "%dM", size);
 	pid = exec_command(1, &fd, NULL, "resize2fs", img, buffer, NULL);
 	if (pid < 0)
@@ -111,8 +105,32 @@ int resize_img(const char *img, int size) {
 	while (fdgets(buffer, sizeof(buffer), fd))
 		LOGD("magisk_img: %s", buffer);
 	close(fd);
-	waitpid(pid, &status, 0);
-	return WEXITSTATUS(status);
+	waitpid(pid, NULL, 0);
+
+	// Double check our image size
+	get_img_size(img, &used, &total);
+	if (total != size) {
+		// Sammy crap occurs or resize2fs failed, lets create a new image!
+		char *dir = dirname(img);
+		snprintf(buffer, sizeof(buffer), "%s/tmp.img", dir);
+		create_img(buffer, size);
+		char *s_loop, *t_loop;
+		s_loop = mount_image(img, SOURCE_TMP);
+		if (s_loop == NULL) return 1;
+		t_loop = mount_image(buffer, TARGET_TMP);
+		if (t_loop == NULL) return 1;
+
+		cp_afc(SOURCE_TMP, TARGET_TMP);
+		umount_image(SOURCE_TMP, s_loop);
+		umount_image(TARGET_TMP, t_loop);
+		rmdir(SOURCE_TMP);
+		rmdir(TARGET_TMP);
+		free(s_loop);
+		free(t_loop);
+		rename(buffer, img);
+	}
+
+	return 0;
 }
 
 char *mount_image(const char *img, const char *target) {
@@ -145,8 +163,9 @@ void umount_image(const char *target, const char *device) {
 int merge_img(const char *source, const char *target) {
 	if (access(source, F_OK) == -1)
 		return 0;
+	LOGI("* Merging %s  -> %s\n", source, target);
 	if (access(target, F_OK) == -1) {
-		rename(source, target);
+		xrename(source, target);
 		return 0;
 	}
 
@@ -157,7 +176,7 @@ int merge_img(const char *source, const char *target) {
 	get_img_size(source, &s_used, &s_total);
 	get_img_size(target, &t_used, &t_total);
 	n_total = round_size(s_used + t_used);
-	if (n_total != t_total)
+	if (n_total > t_total)
 		resize_img(target, n_total);
 
 	xmkdir(SOURCE_TMP, 0755);
@@ -170,7 +189,7 @@ int merge_img(const char *source, const char *target) {
 
 	DIR *dir;
 	struct dirent *entry;
-	if (!(dir = opendir(SOURCE_TMP)))
+	if (!(dir = xopendir(SOURCE_TMP)))
 		return 1;
 	while ((entry = xreaddir(dir))) {
 		if (entry->d_type == DT_DIR) {
@@ -183,7 +202,7 @@ int merge_img(const char *source, const char *target) {
 			snprintf(buffer, sizeof(buffer), "%s/%s", TARGET_TMP, entry->d_name);
 			if (access(buffer, F_OK) == 0) {
 				LOGI("Upgrade module: %s\n", entry->d_name);
-				exec_command_sync(BBPATH "/rm", "-rf", buffer, NULL);
+				rm_rf(buffer);
 			} else {
 				LOGI("New module: %s\n", entry->d_name);
 			}

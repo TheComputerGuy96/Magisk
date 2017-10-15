@@ -40,6 +40,7 @@ LOCAL_SRC_FILES := \
 	utils/xwrap.c \
 	utils/list.c \
 	utils/img.c \
+	utils/file.c \
 	magiskhide/magiskhide.c \
 	magiskhide/proc_monitor.c \
 	magiskhide/hide_utils.c \
@@ -97,10 +98,12 @@ LOCAL_C_INCLUDES := jni/include $(LIBSEPOL)
 LOCAL_SRC_FILES := \
 	magiskinit.c \
 	magiskboot/boot_utils.c \
+	utils/file.c \
 	utils/xwrap.c \
 	magiskpolicy/rules.c \
 	magiskpolicy/sepolicy.c \
 	magiskpolicy/api.c
+LOCAL_CFLAGS := -DNO_SELINUX
 LOCAL_LDFLAGS := -static
 include $(BUILD_EXECUTABLE)
 endif

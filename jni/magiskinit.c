@@ -25,6 +25,7 @@
 
 #include <cil/cil.h>
 
+#include "utils.h"
 #include "magiskpolicy.h"
 
 struct cmdline {
@@ -45,114 +46,6 @@ extern policydb_t *policydb;
 extern void mmap_ro(const char *filename, void **buf, size_t *size);
 extern void mmap_rw(const char *filename, void **buf, size_t *size);
 extern void *patch_init_rc(char *data, uint32_t *size);
-
-static void clone_dir(int src, int dest) {
-	struct dirent *entry;
-	DIR *dir;
-	int srcfd, destfd, newsrc, newdest;
-	struct stat st;
-	char buf[PATH_MAX];
-	ssize_t size;
-
-	dir = fdopendir(src);
-	while ((entry = readdir(dir))) {
-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-			continue;
-		fstatat(src, entry->d_name, &st, AT_SYMLINK_NOFOLLOW);
-		switch (entry->d_type) {
-		case DT_DIR:
-			mkdirat(dest, entry->d_name, st.st_mode & 0777);
-			fchownat(dest, entry->d_name, st.st_uid, st.st_gid, 0);
-			// Don't clone recursive if it's /system
-			if (strcmp(entry->d_name, "system") == 0)
-				continue;
-			newsrc = openat(src, entry->d_name, O_RDONLY | O_CLOEXEC);
-			newdest = openat(dest, entry->d_name, O_RDONLY | O_CLOEXEC);
-			clone_dir(newsrc, newdest);
-			close(newsrc);
-			close(newdest);
-			break;
-		case DT_REG:
-			destfd = openat(dest, entry->d_name, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, st.st_mode & 0777);
-			srcfd = openat(src, entry->d_name, O_RDONLY | O_CLOEXEC);
-			sendfile(destfd, srcfd, 0, st.st_size);
-			fchownat(dest, entry->d_name, st.st_uid, st.st_gid, 0);
-			close(destfd);
-			close(srcfd);
-			break;
-		case DT_LNK:
-			size = readlinkat(src, entry->d_name, buf, sizeof(buf));
-			buf[size] = '\0';
-			symlinkat(buf, dest, entry->d_name);
-			fchownat(dest, entry->d_name, st.st_uid, st.st_gid, AT_SYMLINK_NOFOLLOW);
-			break;
-		}
-	}
-}
-
-static void mv_dir(int src, int dest) {
-	struct dirent *entry;
-	DIR *dir;
-	int newsrc, newdest;
-	struct stat st;
-	char buf[PATH_MAX];
-	ssize_t size;
-
-	dir = fdopendir(src);
-	while ((entry = readdir(dir))) {
-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-			continue;
-		fstatat(src, entry->d_name, &st, AT_SYMLINK_NOFOLLOW);
-		switch (entry->d_type) {
-		case DT_DIR:
-			mkdirat(dest, entry->d_name, st.st_mode & 0777);
-			fchownat(dest, entry->d_name, st.st_uid, st.st_gid, 0);
-			newsrc = openat(src, entry->d_name, O_RDONLY | O_CLOEXEC);
-			newdest = openat(dest, entry->d_name, O_RDONLY | O_CLOEXEC);
-			mv_dir(newsrc, newdest);
-			close(newsrc);
-			close(newdest);
-			break;
-		case DT_REG:
-			renameat(src, entry->d_name, dest, entry->d_name);
-			fchmodat(dest, entry->d_name, st.st_mode & 0777, 0);
-			fchownat(dest, entry->d_name, st.st_uid, st.st_gid, 0);
-			break;
-		case DT_LNK:
-			size = readlinkat(src, entry->d_name, buf, sizeof(buf));
-			buf[size] = '\0';
-			symlinkat(buf, dest, entry->d_name);
-			fchownat(dest, entry->d_name, st.st_uid, st.st_gid, AT_SYMLINK_NOFOLLOW);
-			break;
-		}
-		unlinkat(src, entry->d_name, AT_REMOVEDIR);
-	}
-}
-
-static void rm_rf(int path) {
-	struct dirent *entry;
-	int newfd;
-	DIR *dir = fdopendir(path);
-
-	while ((entry = readdir(dir))) {
-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-			continue;
-		switch (entry->d_type) {
-		case DT_DIR:
-			// Preserve overlay
-			if (strcmp(entry->d_name, "overlay") == 0)
-				continue;
-			newfd = openat(path, entry->d_name, O_RDONLY | O_CLOEXEC);
-			rm_rf(newfd);
-			close(newfd);
-			unlinkat(path, entry->d_name, AT_REMOVEDIR);
-			break;
-		default:
-			unlinkat(path, entry->d_name, 0);
-			break;
-		}
-	}
-}
 
 static void parse_cmdline(struct cmdline *cmd) {
 	char *tok;
@@ -197,8 +90,6 @@ static void parse_device(struct device *dev, char *uevent) {
 
 static int setup_block(struct device *dev, const char *partname) {
 	char buffer[1024], path[128];
-	mkdir("/sys", 0755);
-	mount("sysfs", "/sys", "sysfs", 0, NULL);
 	struct dirent *entry;
 	DIR *dir = opendir("/sys/dev/block");
 	if (dir == NULL)
@@ -266,7 +157,8 @@ static void patch_sepolicy() {
 	if (sepolicy == NULL && access("/vendor/etc/selinux/precompiled_sepolicy", R_OK) == 0) {
 		void *sys_sha = NULL, *ven_sha = NULL;
 		size_t sys_size = 0, ven_size = 0;
-		dir = opendir("/vendor/etc/selinux");
+		if ((dir = opendir("/vendor/etc/selinux")) == NULL)
+			goto check_done;
 		while ((entry = readdir(dir))) {
 			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
 				continue;
@@ -277,7 +169,8 @@ static void patch_sepolicy() {
 			}
 		}
 		closedir(dir);
-		dir = opendir("/system/etc/selinux");
+		if ((dir = opendir("/system/etc/selinux")) == NULL)
+			goto check_done;
 		while ((entry = readdir(dir))) {
 			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
 				continue;
@@ -293,6 +186,8 @@ static void patch_sepolicy() {
 		munmap(sys_sha, sys_size);
 		munmap(ven_sha, ven_size);
 	}
+
+check_done:
 
 	if (sepolicy) {
 		load_policydb(sepolicy);
@@ -362,7 +257,13 @@ int main(int argc, char *argv[]) {
 		// Normal boot mode
 		// Clear rootfs
 		int root = open("/", O_RDONLY | O_CLOEXEC);
-		rm_rf(root);
+
+		// Exclude overlay folder
+		excl_list = (char *[]) { "overlay", NULL };
+		frm_rf(root);
+
+		mkdir("/sys", 0755);
+		mount("sysfs", "/sys", "sysfs", 0, NULL);
 
 		char partname[32];
 		snprintf(partname, sizeof(partname), "system%s", cmd.slot);
@@ -373,7 +274,11 @@ int main(int argc, char *argv[]) {
 		mkdir("/system_root", 0755);
 		mount(dev.path, "/system_root", "ext4", MS_RDONLY, NULL);
 		int system_root = open("/system_root", O_RDONLY | O_CLOEXEC);
+
+		// Exclude system folder
+		excl_list = (char *[]) { "system", NULL };
 		clone_dir(system_root, root);
+		mkdir("/system", 0755);
 		mount("/system_root/system", "/system", NULL, MS_BIND, NULL);
 
 		int overlay = open("/overlay", O_RDONLY | O_CLOEXEC);
@@ -381,8 +286,10 @@ int main(int argc, char *argv[]) {
 			mv_dir(overlay, root);
 
 		snprintf(partname, sizeof(partname), "vendor%s", cmd.slot);
-		setup_block(&dev, partname);
-		mount(dev.path, "/vendor", "ext4", MS_RDONLY, NULL);
+
+		// We need to mount independent vendor partition
+		if (setup_block(&dev, partname) == 0)
+			mount(dev.path, "/vendor", "ext4", MS_RDONLY, NULL);
 
 		patch_ramdisk();
 		patch_sepolicy();

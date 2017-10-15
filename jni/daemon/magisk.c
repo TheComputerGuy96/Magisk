@@ -32,10 +32,6 @@ int create_links(const char *bin, const char *path) {
 	return ret;
 }
 
-// Global error hander function
-// Should be changed each thread/process
-__thread void (*err_handler)(void);
-
 static void usage() {
 	fprintf(stderr,
 		"Magisk v" xstr(MAGISK_VERSION) "(" xstr(MAGISK_VER_CODE) ") (by topjohnwu) multi-call binary\n"
@@ -54,11 +50,12 @@ static void usage() {
 		"   --resizeimg IMG SIZE      resize ext4 image. SIZE is interpreted in MB\n"
 		"   --mountimg IMG PATH       mount IMG to PATH and prints the loop device\n"
 		"   --umountimg PATH LOOP     unmount PATH and delete LOOP device\n"
-		"   --[boot stage]            start boot stage service\n"
+		"   --[init service]          start init service\n"
 		"   --unlock-blocks           set BLKROSET flag to OFF for all block devices\n"
+		"   --restorecon              fix selinux context on Magisk files and folders\n"
 		"\n"
-		"Supported boot stages:\n"
-		"   post-fs, post-fs-data, service\n"
+		"Supported init services:\n"
+		"   daemon post-fs, post-fs-data, service\n"
 		"\n"
 		"Supported applets:\n"
 	, argv0, argv0);
@@ -71,8 +68,6 @@ static void usage() {
 
 int main(int argc, char *argv[]) {
 	argv0 = argv[0];
-	// Exit the whole app if error occurs by default
-	err_handler = exit_proc;
 	char * arg = strrchr(argv[0], '/');
 	if (arg) ++arg;
 	else arg = argv[0];
@@ -146,6 +141,12 @@ int main(int argc, char *argv[]) {
 		} else if (strcmp(argv[1], "--unlock-blocks") == 0) {
 			unlock_blocks();
 			return 0;
+		} else if (strcmp(argv[1], "--restorecon") == 0) {
+			fix_filecon();
+			return 0;
+		} else if (strcmp(argv[1], "--daemon") == 0) {
+			// Start daemon, this process won't return
+			start_daemon();
 		} else if (strcmp(argv[1], "--post-fs") == 0) {
 			int fd = connect_daemon();
 			write_int(fd, POST_FS);

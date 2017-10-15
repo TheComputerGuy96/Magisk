@@ -21,13 +21,12 @@
 #include "utils.h"
 #include "daemon.h"
 #include "magiskpolicy.h"
+#include "resetprop.h"
 
 pthread_t sepol_patch;
+int is_restart = 0;
 
 static void *request_handler(void *args) {
-	// Setup the default error handler for threads
-	err_handler = exit_thread;
-
 	int client = *((int *) args);
 	free(args);
 	client_request req = read_int(client);
@@ -114,25 +113,22 @@ static void *large_sepol_patch(void *args) {
 	return NULL;
 }
 
-void start_daemon(int client) {
-	// Launch the daemon, create new session, set proper context
-	if (getuid() != UID_ROOT || getgid() != UID_ROOT) {
-		fprintf(stderr, "Starting daemon requires root: %s\n", strerror(errno));
-		PLOGE("start daemon");
-	}
+static void *start_magisk_hide(void *args) {
+	launch_magiskhide(-1);
+	return NULL;
+}
 
-	switch (fork()) {
-	case -1:
-		PLOGE("fork");
-	case 0:
-		break;
-	default:
-		return;
+void auto_start_magiskhide() {
+	char *hide_prop = getprop2(MAGISKHIDE_PROP, 1);
+	if (hide_prop == NULL || strcmp(hide_prop, "0") != 0) {
+		pthread_t thread;
+		xpthread_create(&thread, NULL, start_magisk_hide, NULL);
+		pthread_detach(thread);
 	}
+	free(hide_prop);
+}
 
-	// First close the client, it's useless for us
-	close(client);
-	xsetsid();
+void start_daemon() {
 	setcon("u:r:su:s0");
 	umask(0);
 	int fd = xopen("/dev/null", O_RDWR | O_CLOEXEC);
@@ -146,32 +142,36 @@ void start_daemon(int client) {
 	sepol_med_rules();
 	dump_policydb(SELINUX_LOAD);
 
-	// Continue the larger patch in another thread, we will join later
-	pthread_create(&sepol_patch, NULL, large_sepol_patch, NULL);
-
 	struct sockaddr_un sun;
 	fd = setup_socket(&sun);
 
-	xbind(fd, (struct sockaddr*) &sun, sizeof(sun));
+	if (xbind(fd, (struct sockaddr*) &sun, sizeof(sun)) == -1)
+		exit(1);
 	xlisten(fd, 10);
+
+	if ((is_restart = access(UNBLOCKFILE, F_OK) == 0)) {
+		// Restart stuffs if the daemon is restarted
+		exec_command_sync("logcat", "-b", "all", "-c", NULL);
+		auto_start_magiskhide();
+		start_debug_log();
+	}
+
+	// Start the log monitor
+	monitor_logs();
+
+	// Continue the larger patch in another thread, we will join later
+	xpthread_create(&sepol_patch, NULL, large_sepol_patch, NULL);
+
+	LOGI("Magisk v" xstr(MAGISK_VERSION) "(" xstr(MAGISK_VER_CODE) ") daemon started\n");
 
 	// Change process name
 	strcpy(argv0, "magisk_daemon");
-	// The root daemon should not do anything if an error occurs
-	// It should stay intact under any circumstances
-	err_handler = do_nothing;
-
-	LOGI("Magisk v" xstr(MAGISK_VERSION) "(" xstr(MAGISK_VER_CODE) ") daemon started\n");
 
 	// Unlock all blocks for rw
 	unlock_blocks();
 
-	// Setup links under /sbin
-	xmount(NULL, "/", NULL, MS_REMOUNT, NULL);
-	create_links(NULL, "/sbin");
-	xchmod("/sbin", 0755);
-	xmkdir("/magisk", 0755);
-	xmount(NULL, "/", NULL, MS_REMOUNT | MS_RDONLY, NULL);
+	// Notifiy init the daemon is started
+	close(xopen(UNBLOCKFILE, O_RDONLY | O_CREAT));
 
 	// Loop forever to listen for requests
 	while(1) {
@@ -188,12 +188,21 @@ void start_daemon(int client) {
 int connect_daemon() {
 	struct sockaddr_un sun;
 	int fd = setup_socket(&sun);
-	if (connect(fd, (struct sockaddr*) &sun, sizeof(sun))) {
-		/* If we cannot access the daemon, we start the daemon
-		 * since there is no clear entry point when the daemon should be started
-		 */
-		LOGD("client: connect fail, try launching new daemon process\n");
-		start_daemon(fd);
+	if (xconnect(fd, (struct sockaddr*) &sun, sizeof(sun))) {
+		// If we cannot access the daemon, we start a daemon in the child process if possible
+
+		if (getuid() != UID_ROOT || getgid() != UID_ROOT) {
+			fprintf(stderr, "No daemon is currently running!\n");
+			exit(1);
+		}
+
+		if (xfork() == 0) {
+			LOGD("client: connect fail, try launching new daemon process\n");
+			close(fd);
+			xsetsid();
+			start_daemon();
+		}
+
 		do {
 			// Wait for 10ms
 			usleep(10);

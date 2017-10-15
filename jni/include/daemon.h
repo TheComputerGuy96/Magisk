@@ -7,6 +7,7 @@
 #include <pthread.h>
 
 extern pthread_t sepol_patch;
+extern int is_restart;
 
 // Commands require connecting to daemon
 typedef enum {
@@ -38,8 +39,9 @@ typedef enum {
 
 // daemon.c
 
-void start_daemon(int client);
+void start_daemon();
 int connect_daemon();
+void auto_start_magiskhide();
 
 // socket_trans.c
 
@@ -50,10 +52,6 @@ void write_int(int fd, int val);
 char* read_string(int fd);
 void write_string(int fd, const char* val);
 
-// log_monitor.c
-
-void monitor_logs();
-
 /***************
  * Boot Stages *
  ***************/
@@ -61,6 +59,7 @@ void monitor_logs();
 void post_fs(int client);
 void post_fs_data(int client);
 void late_start(int client);
+void fix_filecon();
 
 /**************
  * MagiskHide *

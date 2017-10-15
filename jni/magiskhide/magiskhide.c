@@ -41,9 +41,6 @@ static void usage(char *arg0) {
 }
 
 void launch_magiskhide(int client) {
-	// We manually handle crashes
-	err_handler = do_nothing;
-
 	if (hideEnabled) {
 		if (client > 0) {
 			write_int(client, HIDE_IS_ENABLED);
@@ -55,7 +52,7 @@ void launch_magiskhide(int client) {
 	hideEnabled = 1;
 	LOGI("* Starting MagiskHide\n");
 
-	deleteprop(MAGISKHIDE_PROP, 1);
+	deleteprop2(MAGISKHIDE_PROP, 1);
 
 	hide_sensitive_props();
 
@@ -102,7 +99,7 @@ void stop_magiskhide(int client) {
 	hideEnabled = 0;
 	setprop(MAGISKHIDE_PROP, "0");
 	// Remove without actually removing persist props
-	deleteprop(MAGISKHIDE_PROP, 0);
+	deleteprop2(MAGISKHIDE_PROP, 0);
 	pthread_kill(proc_monitor_thread, SIGUSR1);
 
 	write_int(client, DAEMON_SUCCESS);
@@ -124,6 +121,8 @@ int magiskhide_main(int argc, char *argv[]) {
 		req = RM_HIDELIST;
 	} else if (strcmp(argv[1], "--ls") == 0) {
 		req = LS_HIDELIST;
+	} else {
+		usage(argv[0]);
 	}
 	int fd = connect_daemon();
 	write_int(fd, req);
