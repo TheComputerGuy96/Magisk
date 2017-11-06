@@ -10,7 +10,7 @@ android:
 
 before_script:
   - sleep 3; echo "y" | sdkmanager --update
-  - (while true; do echo "y"; sleep 3; done) | sdkmanager "build-tools;26.0.2" "extras;android;m2repository" "ndk-bundle" > /dev/null
+  - (while true; do echo "y"; sleep 3; done) | sdkmanager "build-tools;27.0.0" "extras;android;m2repository" "ndk-bundle" > /dev/null
   - echo | sudo add-apt-repository ppa:jonathonf/python-3.6
   - sudo apt-get update
   - sudo apt-get install -y python3.6
@@ -23,8 +23,8 @@ env:
     - GH_MAGISKFILES_REPO=github.com/TheComputerGuy96/MagiskFiles.git
     - GH_USERNAME=TheComputerGuy96
     - MAGISK_DATE=$(date -u +%Y%m%d)
-    - MAGISK_VER_INTEGER=1440
-    - MAGISK_VER_STRING=14.4
+    - MAGISK_VER_INTEGER=1450
+    - MAGISK_VER_STRING=14.5
     - MAGISK_TIME=$(date -u +%H%M%S)
     - MAGISK_ZIPFILES=Magisk-*.zip
     - MAGISKFILES_NAME=MagiskFiles
