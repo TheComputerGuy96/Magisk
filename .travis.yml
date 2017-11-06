@@ -36,17 +36,17 @@ script:
 
 after_success:
   - git clone https://${GH_MAGISKFILES_REPO}
-  - mv -f Magisk-uninstaller-${MAGISK_DATE}.zip Magisk-uninstaller-${MAGISK_DATE}-${MAGISK_TIME}.zip
-  - mv -f Magisk-v${MAGISK_VER_STRING}.zip Magisk-v${MAGISK_VER_STRING}-${MAGISK_DATE}-${MAGISK_TIME}.zip
-  - rm -f Magisk-uninstaller-${MAGISK_DATE}.zip
-  - rm -f Magisk-v${MAGISK_VER_STRING}.zip
-  - mv -f ${MAGISK_ZIPFILES} ${MAGISKFILES_NAME}/
+  - mv -f out/Magisk-uninstaller-${MAGISK_DATE}.zip out/Magisk-uninstaller-${MAGISK_DATE}-${MAGISK_TIME}.zip
+  - mv -f out/Magisk-v${MAGISK_VER_STRING}.zip out/Magisk-v${MAGISK_VER_STRING}-${MAGISK_DATE}-${MAGISK_TIME}.zip
+  - rm -f out/Magisk-uninstaller-${MAGISK_DATE}.zip
+  - rm -f out/Magisk-v${MAGISK_VER_STRING}.zip
+  - mv -f out/${MAGISK_ZIPFILES} ${MAGISKFILES_NAME}/
   - cd ${MAGISKFILES_NAME}
   - git config user.email "${GH_EMAIL}"
   - git config user.name "${GH_FULLNAME}"
   - git add ${MAGISK_ZIPFILES}
   - git commit -m "${MAGISK_DATE}-${MAGISK_TIME} build"
   - git push "https://${GH_USERNAME}:${GH_PUSH_TOKEN}@${GH_MAGISKFILES_REPO}" master 2>&1 && touch .push_success
-  - '[ -f .push_success ] && echo "Magisk files have been successfully pushed to GitHub"'
-  - '[ -f .push_success ] && echo "GitHub repository link: https://${GH_MAGISKFILES_REPO}"'
+  - '[ -f .push_success -a -f ${MAGISK_ZIPFILES} ] && echo "Magisk files have been successfully pushed to GitHub"'
+  - '[ -f .push_success -a -f ${MAGISK_ZIPFILES} ] && echo "GitHub repository link: https://${GH_MAGISKFILES_REPO}"'
   - rm -f .push_success
